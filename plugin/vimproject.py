@@ -271,8 +271,11 @@ class VimProject(object):
             self.vimcmd = gl['VIMCMD']
         self.commit_settings()
 
+    def get_temp_dir(self):
+        return ''.join((self.basedir, '/.vimproject'))
+
     def get_fname_base(self):
-        return ''.join((self.tempdir, '/', self.basedir.replace("/", "_").replace(":", "_"), '_', self.projectname))
+        return ''.join((self.get_temp_dir(), "/", self.projectname))
 
     def get_file_list(self):
         return self.get_fname_base() + ".list.tmp"
@@ -395,6 +398,8 @@ class VimProject(object):
             self.add_cscope_database()
 
     def update(self):
+        if not path.exists(self.get_temp_dir()):
+            os.makedirs(self.get_temp_dir())
         self.refresh_files()
         self.refresh_tags()
         self.refresh_cscope()
@@ -506,7 +511,7 @@ def replace_pattern(pattern, repl):
         print >> sys.stderr, "%s not found!" % flist
 
 def start_terminal_on_project():
-    iswin = int(vim.eval('g:isWin'))
+    iswin = int(vim.eval('has("win32")'))
     if iswin:
         orig = os.getcwd()
         os.chdir(g_vimproject.basedir)
