@@ -201,9 +201,6 @@ class VimProject(object):
         self.tags = []
         self.projectfile = ""
         self.vimcmd = ""
-        self.tempdir = formpath(os.environ.get("HOME", vim.eval("$vim")) + "/.vimprj")
-        if not os.path.isdir(self.tempdir):
-            os.mkdir(self.tempdir)
 
         if ext in ['py', 'pyw']:
             self.make = 'pylint -r n -f parseable %:p'
@@ -523,14 +520,14 @@ def start_terminal_on_project():
 
 g_temp_path = ''
 def before_quickfix_cmd():
-    if g_vimproject.type != "python":
-        global g_temp_path
-        g_temp_path = formpath(vim.eval('getcwd()'))
-        vim.command('silent lcd ' + str2vimfmt(g_vimproject.basedir))
+    global g_temp_path
+    if not os.path.exists(g_vimproject.get_temp_dir()):
+        os.makedirs(g_vimproject.get_temp_dir())
+    g_temp_path = formpath(vim.eval('getcwd()'))
+    vim.command('silent lcd ' + str2vimfmt(g_vimproject.basedir))
 
 def after_quickfix_cmd():
-    if g_vimproject.type != "python":
-        vim.command('silent lcd ' + str2vimfmt(g_temp_path))
+    vim.command('silent lcd ' + str2vimfmt(g_temp_path))
     vim.command('cwindow')
 
 
