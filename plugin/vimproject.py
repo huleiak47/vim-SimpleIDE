@@ -5,6 +5,8 @@ import vim
 import os
 import sys
 import shutil
+import hashlib
+import tempfile
 from subprocess import call, Popen
 from copy import copy
 path = os.path
@@ -269,7 +271,7 @@ class VimProject(object):
         self.commit_settings()
 
     def get_temp_dir(self):
-        return ''.join((self.basedir, '/.vimproject'))
+        return os.path.join(tempfile.gettempdir(), "vimproject_" + hashlib.md5(self.basedir).hexdigest())
 
     def get_fname_base(self):
         return ''.join((self.get_temp_dir(), "/", self.projectname))
