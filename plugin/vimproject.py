@@ -186,7 +186,7 @@ class VimProject(object):
         ext = vim.eval('''expand('%:e')''')
         if not ext:
             ext = ''
-        self.projectname = vim.eval('expand("%")')
+        self.projectname = vim.eval('expand("%:t")')
         if not self.projectname:
             self.projectname = "untitled"
         self.basedir = formpath(vim.eval('getcwd()'))
