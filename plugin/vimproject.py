@@ -402,6 +402,7 @@ class VimProject(object):
             listfile=str2arfmt(file_list),
             regex=str2arfmt(regex),
             )
+        self.set_grep_efm()
         self.async_run(grepcmd, self.get_grep_tmpfile())
 
     def set_grep_efm(self):
