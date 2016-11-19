@@ -29,6 +29,17 @@ _COMPILER_EFM = {
             r"%s: %tarning LNK%n: %m",
         ],
     ],
+    'llvm': [
+        [
+            r"%f(%l\,%c):  %trror: %m",
+            r"%f: %\(undefined%.%#%\)%\@=%m",
+        ],
+
+        [
+            r"%f(%l\,%c):  %tarning: %m",
+        ],
+
+    ],
     'gcc' : [
         [
             r"%f:%l:%c: %trror:%m",
@@ -357,6 +368,7 @@ class VimProject(object):
 
     def open_quickfix(self):
         vim.command("execute 'copen 15'")
+        vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
     def async_run(self, cmd, tmpfile):
         self.open_quickfix()
