@@ -9,6 +9,7 @@ import hashlib
 import tempfile
 from subprocess import call, Popen
 from copy import copy
+import vimrecoding
 path = os.path
 
 RECODING = path.dirname(__file__) + "/vimrecoding.py"
@@ -95,7 +96,7 @@ _COMPILER_EFM = {
     ],
     'javac' : [
         [
-            r"%+E%f:%l: %\(%[wW]arning:%\|警告：%\)%\@!%m",
+            r"%+E%f:%l: %\(%[eE]rror:%\|错误：%\)%\@!%m",
             r"%-Z%p^",
             r"%+C%.%#",
         ],
@@ -161,14 +162,6 @@ def str2vimfmt(s):
     ret = []
     for c in s:
         if c in ['\\', ' ', '|', '"', ',']:
-            ret.append('\\')
-        ret.append(c)
-    return ''.join(ret)
-
-def str2arfmt(s):
-    ret = []
-    for c in s:
-        if c in [' ']:
             ret.append('\\')
         ret.append(c)
     return ''.join(ret)
@@ -347,6 +340,28 @@ class VimProject(object):
         if self.type in ['c', 'cpp', 'java']:
             vim.command('silent! cs add %s %s' % (str2vimfmt(self.get_cscope_fname()), str2vimfmt(self.basedir)))
 
+    def open_eclimd(self):
+        if self.type == "java":
+            # if project is Java and eclimd is not started, then start eclimd
+            try:
+                import psutil
+            except ImportError:
+                return
+            for proc in psutil.process_iter():
+                try:
+                    exe = path.basename(proc.exe())
+                    if exe.lower() not in ["eclipse.exe", "eclipse"]:
+                        continue
+                    cmdline = proc.cmdline()
+                    if "-application" in cmdline and "org.eclim.application" in cmdline:
+                        return
+                except Exception:
+                    pass
+            else:
+                # eclim process not found
+                os.system("eclimd.bat")
+
+
     def load_session_file(self):
         session = self.get_session_fname()
         if self.projectfile and path.isfile(session):
@@ -363,6 +378,7 @@ class VimProject(object):
         vim.command('silent set tags=%s' % ','.join(map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
         self.add_library_tags()
         self.add_cscope_database()
+        self.open_eclimd()
         if self.vimcmd:
             vim.command(self.vimcmd)
 
@@ -370,17 +386,22 @@ class VimProject(object):
         vim.command("execute 'copen 15'")
         vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
-    def async_run(self, cmd, tmpfile):
-        self.open_quickfix()
-        enc = vim.eval("&encoding")
-        vim.command("AsyncRun cd {basedir} && {cmd} 2>&1 | python {recoding} {enc} | tee {tmpfile}".format(
-            basedir=str2arfmt(self.basedir),
-            cmd=cmd,
-            recoding=str2arfmt(RECODING),
-            enc=str2arfmt(enc),
-            tmpfile=str2arfmt(tmpfile)
+    def async_run(self, cmd, qffile=None):
+        vim_cmd = 'silent !cd "{basedir}" && {cmd} 2>&1'.format(
+            basedir = self.basedir,
+            cmd=cmd
             )
-        )
+
+        if qffile:
+            vim_cmd += ' | tee "{qffile}"'.format(qffile=qffile)
+
+        vim.command(vim_cmd)
+
+        if qffile:
+            enc = vim.eval("&encoding")
+            vimrecoding.recode_file(qffile, enc)
+            self.open_quickfix()
+            vim.command('cfile {qffile}'.format(qffile=str2vimfmt(qffile)))
 
     def make_project(self, args):
         self.update_compiler_efm()
@@ -411,8 +432,8 @@ class VimProject(object):
             print >> sys.stderr, "%s not exist." % file_list
             return
         grepcmd = r'cat {listfile} | pyargs pygrep -HnCS {regex}'.format(
-            listfile=str2arfmt(file_list),
-            regex=str2arfmt(regex),
+            listfile=file_list,
+            regex=regex,
             )
         self.set_grep_efm()
         self.async_run(grepcmd, self.get_grep_tmpfile())
@@ -424,12 +445,10 @@ class VimProject(object):
         self.refresh_files()
         flist = self.get_file_list()
         if path.isfile(flist):
-            self.set_grep_efm()
-            self.open_quickfix()
-            vim.command('AsyncRun cat {flist} | pyargs pyrep -i -b -f {pattern} -t {repl}'.format(
-                flist=str2arfmt(flist),
-                pattern=str2arfmt(pattern),
-                repl=str2arfmt(repl)
+            self.async_run('cat "{flist}" | pyargs pyrep -i -b -f "{pattern}" -t "{repl}"'.format(
+                flist=flist,
+                pattern=pattern,
+                repl=repl
                 ))
         else:
             print >> sys.stderr, "%s not found!" % flist
