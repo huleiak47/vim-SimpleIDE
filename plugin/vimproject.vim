@@ -24,10 +24,12 @@ sys.path.append(vim.eval("s:plugin_path"))
 from vimproject import *
 PYTHON_EOF
 
+au BufRead,BufNewFile *.vprj *.jvprj setf vimproj
+
 au FileType vimproj             python from_this_file()
 au FileType vimproj             python update_project_history()
 au FileType vimproj             set syntax=python
-au BufWritePost *.vprj          python from_this_file()
+au BufWritePost *.vprj *.jvprj  python from_this_file()
 
 au VimLeavePre *                python g_vimproject.write_session_file()
 
