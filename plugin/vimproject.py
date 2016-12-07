@@ -384,6 +384,7 @@ class VimProject(object):
 
     def open_quickfix(self):
         vim.command("execute 'copen 15'")
+        vim.command('wincmd p')
         vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
     def async_run(self, cmd, qffile=None):
