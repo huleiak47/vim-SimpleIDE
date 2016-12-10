@@ -27,7 +27,7 @@ PYTHON_EOF
 au FileType vimproj             python from_this_file()
 au FileType vimproj             python update_project_history()
 au FileType vimproj             set syntax=python
-au BufWritePost *.vprj *.jvprj  python from_this_file()
+au BufWritePost *.vprj,*.jvprj  python from_this_file()
 
 au VimLeavePre *                python g_vimproject.write_session_file()
 
