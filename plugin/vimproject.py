@@ -526,7 +526,7 @@ def from_this_file():
 def update_project_history():
     fname = g_vimproject.projectfile
     iswin = int(vim.eval('g:isWin'))
-    if fname.endswith(".vprj"):
+    if fname.endswith(".vprj") or fname.endswith(".jvprj"):
         fs = []
         histfile = vim.eval("$HOME") + "/.vimproject"
         if path.isfile(histfile):
