@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
 
+import os
 import sys
 import chardet
+
 
 def guess_encoding(line):
     encs = ["ascii", "utf-8", "cp936", "big5", "latin1"]
@@ -33,8 +32,8 @@ def recode_std(enc):
         sys.stdout.flush()
 
 def recode_file(fname, enc):
-    text = open(fname).read()
+    text = open(fname, "rb").read().replace(b'\r', b'')
     src_enc, new_text = guess_encoding(text)
 
-    with open(fname, "w") as f:
+    with open(fname, "wb") as f:
         f.write(new_text.encode(enc, "replace"))
