@@ -627,8 +627,6 @@ def grep_selection():
     selection = vim.eval("VPGetVisual()")
     if not selection:
         return
-    if vim.eval('&encoding') != vim.eval('&termencoding'):
-        selection = selection.decode(vim.eval('&encoding')).encode(vim.eval('&termencoding'), 'replace')
     g_vimproject.grep_text(to_re_pattern(selection))
 
 def replace_to(pattern):

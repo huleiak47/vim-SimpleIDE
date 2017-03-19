@@ -7,14 +7,16 @@ let g:vimproject_loaded = 1
 let s:plugin_path = escape(expand('<sfile>:p:h'), '\')
 "exe 'python sys.path = ["' . s:plugin_path . '"] + sys.path'
 
-function! VPGetVisual()
-    " Why is this not a built-in Vim script function?!
-    let [lnum1, col1] = getpos("'<")[1:2]
-    let [lnum2, col2] = getpos("'>")[1:2]
-    let lines = getline(lnum1, lnum2)
-    let lines[-1] = lines[-1][: col2 - (&selection == 'inclusive' ? 0 : 1)]
-    let lines[0] = lines[0][col1 - 1:]
-    return join(lines, "\n")
+function! VPGetVisual() range
+    let reg_save = getreg('"')
+    let regtype_save = getregtype('"')
+    let cb_save = &clipboard
+    set clipboard&
+    normal! ""gvy
+    let selection = getreg('"')
+    call setreg('"', reg_save, regtype_save)
+    let &clipboard = cb_save
+    return selection
 endfunction
 
 python3 << PYTHON_EOF
