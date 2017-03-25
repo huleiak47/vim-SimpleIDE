@@ -62,7 +62,7 @@ function! s:GrepPattern()
     let pattern = input('Grep: ')
     if pattern != ''
         if &encoding != &termencoding
-            let pattern = iconv(pattern, &encoding, &termencoding)
+            " let pattern = iconv(pattern, &encoding, &termencoding)
         endif
         execute 'python3 g_vimproject.grep_text("' . pattern . '")'
     endif
