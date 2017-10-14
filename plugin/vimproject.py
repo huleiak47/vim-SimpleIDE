@@ -566,8 +566,12 @@ def edit_project_file():
     fname = g_vimproject.basedir + '/' + g_vimproject.projectname + '.vprj'
     if path.isfile(fname):
         vim.command('silent find %s' % str2vimfmt(fname))
-    else:
-        print("Project file does not exist, cannot open it!", file=sys.stderr)
+        return
+    fname = g_vimproject.basedir + '/' + g_vimproject.projectname + '.jvprj'
+    if path.isfile(fname):
+        vim.command('silent find %s' % str2vimfmt(fname))
+        return
+    print("Project file does not exist, cannot open it!", file=sys.stderr)
 
 def edit_file_list_file():
     fname = g_vimproject.get_file_list()
@@ -583,6 +587,8 @@ def search_project_file():
         ret = os.listdir(cwd)
         for fname in ret:
             if fname.lower().endswith('.vprj'):
+                files.append(cwd + '/' + fname)
+            elif fname.lower().endswith('.jvprj'):
                 files.append(cwd + '/' + fname)
         _cwd = path.dirname(cwd)
         if _cwd == cwd:
