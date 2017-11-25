@@ -96,12 +96,14 @@ _COMPILER_EFM = {
     ],
     'javac' : [
         [
-            r"%+E%f:%l: %\(%[eE]rror:%\|错误：%\)%\@!%m",
+            r"%E%f:%l: 错误: %m",
+            r"%E%f:%l: error: %m",
             r"%-Z%p^",
             r"%+C%.%#",
         ],
         [
-            r"%+W%f:%l: %\(%[wW]arning:%\|警告：%\)%\@=%m",
+            r"%W%f:%l: 警告: %m",
+            r"%W%f:%l: warning: %m",
         ],
     ],
     'common' : [
