@@ -386,6 +386,8 @@ class VimProject(object):
 
     def open_quickfix(self):
         vim.command("execute 'copen 15'")
+        if not self.is_error_in_quickfix():
+            vim.command("execute 'normal G'")
         vim.command('wincmd p')
         vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
@@ -403,8 +405,17 @@ class VimProject(object):
         if qffile:
             enc = vim.eval("&encoding")
             vimrecoding.recode_file(qffile, enc)
-            self.open_quickfix()
             vim.command('cfile {qffile}'.format(qffile=str2vimfmt(qffile)))
+            self.open_quickfix()
+
+    def is_error_in_quickfix(self):
+        qflist = vim.eval("getqflist()")
+        for info in qflist:
+            if int(info['valid']) != 0:
+                # 有错误
+                return 1
+        return 0
+
 
     def make_project(self, args):
         self.update_compiler_efm()
@@ -458,11 +469,11 @@ class VimProject(object):
 
 
     def load_quickfix_file(self, fname):
-        self.open_quickfix()
         cwd = formpath(vim.eval('getcwd()'))
         vim.command('silent cd ' + str2vimfmt(self.basedir))
         vim.command('silent cfile %s' % str2vimfmt(fname))
         vim.command('silent cd ' + str2vimfmt(cwd))
+        self.open_quickfix()
 
     def load_make_result(self):
         if path.isfile(self.get_make_tmpfile()):
