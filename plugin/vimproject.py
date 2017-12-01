@@ -99,7 +99,7 @@ _COMPILER_EFM = {
             r"%E%f:%l: 错误: %m",
             r"%E%f:%l: error: %m",
             r"%-Z%p^",
-            r"%+C%.%#",
+            r"%-C%.%#",
         ],
         [
             r"%W%f:%l: 警告: %m",
