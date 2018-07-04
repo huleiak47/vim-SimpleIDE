@@ -342,28 +342,6 @@ class VimProject(object):
         if self.type in ['c', 'cpp', 'java']:
             vim.command('silent! cs add %s %s' % (str2vimfmt(self.get_cscope_fname()), str2vimfmt(self.basedir)))
 
-    def open_eclimd(self):
-        if self.type == "java":
-            # if project is Java and eclimd is not started, then start eclimd
-            try:
-                import psutil
-            except ImportError:
-                return
-            for proc in psutil.process_iter():
-                try:
-                    exe = path.basename(proc.exe())
-                    if exe.lower() not in ["eclipse.exe", "eclipse"]:
-                        continue
-                    cmdline = proc.cmdline()
-                    if "-application" in cmdline and "org.eclim.application" in cmdline:
-                        return
-                except Exception:
-                    pass
-            else:
-                # eclim process not found
-                os.system("eclimd.bat")
-
-
     def load_session_file(self):
         session = self.get_session_fname()
         if self.projectfile and path.isfile(session):
@@ -380,7 +358,6 @@ class VimProject(object):
         vim.command('silent set tags=%s' % ','.join(map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
         self.add_library_tags()
         self.add_cscope_database()
-        self.open_eclimd()
         if self.vimcmd:
             vim.command(self.vimcmd)
 
@@ -459,7 +436,7 @@ class VimProject(object):
         self.refresh_files()
         flist = self.get_file_list()
         if path.isfile(flist):
-            self.async_run('cat "{flist}" | pyargs pyrep -i -b -f "{pattern}" -t "{repl}"'.format(
+            self.async_run('cat "{flist}" | pyargs pyrep -i -f "{pattern}" -t "{repl}"'.format(
                 flist=flist,
                 pattern=pattern,
                 repl=repl

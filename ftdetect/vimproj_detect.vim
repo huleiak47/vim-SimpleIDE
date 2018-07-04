@@ -1,1 +1,1 @@
-au BufRead,BufNewFile *.vprj,*.jvprj setf vimproj
+au BufRead,BufNewFile *.vprj setf vimproj
