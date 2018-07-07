@@ -13,6 +13,7 @@ import vimrecoding
 path = os.path
 
 RECODING = path.dirname(__file__) + "/vimrecoding.py"
+IS_WIN = int(vim.eval('has("win32")'))
 
 #对于不同编译器的不同错误信息格式，第一项为错误，第二项为警告
 _COMPILER_EFM = {
@@ -167,6 +168,12 @@ def str2vimfmt(s):
             ret.append('\\')
         ret.append(c)
     return ''.join(ret)
+
+def escape_text(text):
+    if IS_WIN:
+        return text
+    else:
+        return text.replace("\\", "\\\\")
 
 def search_files(pathitems, suffixes):
     ret = []
@@ -417,12 +424,13 @@ class VimProject(object):
         vim.command(r"silent set efm=%s" % ','.join(map(str2vimfmt, fmts)))
 
     def grep_text(self, regex):
+        regex = escape_text(regex)
         self.refresh_files()
         file_list = self.get_file_list()
         if not os.path.exists(file_list):
             print("%s not exist." % file_list, file=sys.stderr)
             return
-        grepcmd = r'cat {listfile} | pyargs pygrep -HnCS {regex}'.format(
+        grepcmd = r'cat {listfile} | pyargs pygrep -HnCS "{regex}"'.format(
             listfile=file_list,
             regex=regex,
             )
@@ -433,6 +441,8 @@ class VimProject(object):
         vim.command(r"silent set efm=%f:%l:%c:%m,%f:%l:%m")
 
     def replace_pattern(self, pattern, repl):
+        pattern = escape_text(pattern)
+        repl = escape_text(repl)
         self.refresh_files()
         flist = self.get_file_list()
         if path.isfile(flist):
@@ -515,14 +525,13 @@ def from_this_file():
 
 def update_project_history():
     fname = g_vimproject.projectfile
-    iswin = int(vim.eval('g:isWin'))
     if fname.endswith(".vprj") or fname.endswith(".jvprj"):
         fs = []
         histfile = vim.eval("$HOME") + "/.vimproject"
         if path.isfile(histfile):
             fs = [l for l in [l.strip() for l in open(histfile, "r").readlines()] if l]
         try:
-            if not iswin:
+            if not IS_WIN:
                 ret = fs.index(fname)
                 fs.pop(ret)
             else:
@@ -593,8 +602,7 @@ def search_project_file():
         print("Have not found any project file.", file=sys.stderr)
 
 def start_terminal_on_project():
-    iswin = int(vim.eval('has("win32")'))
-    if iswin:
+    if IS_WIN:
         orig = os.getcwd()
         os.chdir(g_vimproject.basedir)
         #os.system('start cmd.exe')
