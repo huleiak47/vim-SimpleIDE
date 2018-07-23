@@ -6,13 +6,12 @@ import os
 import sys
 import shutil
 import hashlib
+from pathlib import Path
 import tempfile
 from subprocess import call, Popen
 from copy import copy
 import vimrecoding
-path = os.path
 
-RECODING = path.dirname(__file__) + "/vimrecoding.py"
 IS_WIN = int(vim.eval('has("win32")'))
 
 #对于不同编译器的不同错误信息格式，第一项为错误，第二项为警告
@@ -175,41 +174,6 @@ def escape_text(text):
     else:
         return text.replace("\\", "\\\\")
 
-def search_files(pathitems, suffixes):
-    ret = []
-    for i in range(len(pathitems)):
-        if pathitems[i] == "*":
-            basedir = "/".join(pathitems[:i])
-            if not path.isdir(basedir):
-                return ret
-            for d in os.listdir(basedir):
-                if path.isdir(path.join(basedir, d)):
-                    items = copy(pathitems)
-                    items[i] = d
-                    ret.extend(search_files(items, suffixes))
-            return ret
-        if pathitems[i] == "**":
-            basedir = "/".join(pathitems[:i])
-            if not path.isdir(basedir):
-                return ret
-            for root, dirs, files in os.walk(basedir):
-                items = copy(pathitems)
-                items[i] = path.relpath(root, basedir)
-                ret.extend(search_files(items, suffixes))
-            return ret
-    if isinstance(suffixes, str):
-        p = "/".join(pathitems) + "/" + suffixes
-        if path.isfile(p):
-            ret.append(p)
-    else:
-        basedir = "/".join(pathitems)
-        if not path.isdir(basedir):
-            return ret
-        for f in os.listdir(basedir):
-            pp = path.join(basedir, f)
-            if ("*" in suffixes or path.splitext(pp)[1].lower() in suffixes) and path.isfile(pp):
-                ret.append(formpath(path.normpath(pp)))
-    return ret
 
 class VimProject(object):
     def __init__(self):
@@ -224,7 +188,7 @@ class VimProject(object):
         if not self.projectname:
             self.projectname = "untitled"
         self.basedir = formpath(vim.eval('getcwd()'))
-        self.path = [self.basedir + '/**']
+        self.path = ['.']
         self.suffix = ['.' + ext]
         self.make= ''
         self.execute = ''
@@ -243,22 +207,23 @@ class VimProject(object):
             self.compiler = ['pylint']
 
     def from_file(self, fname):
-        if not fname or not path.isfile(fname):
+        fpproj = Path(fname).absolute()
+        if not fname or not fpproj.is_file():
             return
         gl = {}
         try:
-            exec(compile(open(fname).read(), fname, 'exec'), gl)
+            exec(compile(fpproj.read_text(), fname, 'exec'), gl)
         except Exception as e:
             print(str(e), file=sys.stderr)
             return
         self.reset_config()
-        self.projectfile = formpath(fname)
-        self.projectname = path.splitext(path.basename(fname))[0]
-        self.basedir = formpath(path.dirname(path.abspath(fname)))
+        self.projectfile = fpproj
+        self.projectname = fpproj.stem
+        self.basedir = formpath(str(fpproj.parent))
         if 'NAME' in gl:
             self.projectname = gl['NAME']
         if 'PATH' in gl:
-            self.path = list(map(formpath, list(map(path.abspath, gl['PATH']))))
+            self.path = gl['PATH']
         if 'EXECUTE' in gl:
             self.execute = gl['EXECUTE']
         if 'TYPE' in gl:
@@ -280,37 +245,28 @@ class VimProject(object):
                 self.suffix = ['.vim']
         if 'MAKE' in gl:
             self.make= gl['MAKE']
-        else:
-            if self.type == 'python':
-                self.make= 'pylint -r n -f parseable %:p'
         if 'COMPILER' in gl:
             self.compiler = gl['COMPILER']
         else:
-            if self.type in['c', 'cpp']:
-                self.compiler = ['msvc', 'gcc', 'scons']
-            elif self.type in ['latex']:
-                self.compiler = ['common']
-            elif self.type == 'java':
-                self.compiler = ['javac']
-            elif self.type in ['python']:
-                self.compiler = ['pylint']
+            self.compiler = ['common']
         if 'PAUSE' in gl:
             self.pause = gl['PAUSE']
         if 'LIBTAGS' in gl:
             self.libtags = gl['LIBTAGS']
         if 'TAGS' in gl:
-            self.tags = list(map(formpath, list(map(path.abspath, gl['TAGS']))))
+            # self.tags = list(map(formpath, list(map(path.abspath, gl['TAGS']))))
+            self.tags = [Path(p).absolute().as_posix() for p in gl['TAGS']]
         if 'VIMCMD' in gl:
             self.vimcmd = gl['VIMCMD']
         self.commit_settings()
 
     def get_temp_dir(self):
-        if not path.exists(self.tempdir):
-            os.makedirs(self.tempdir)
+        if not self.tempdir.exists():
+            self.tempdir.mkdir()
         return self.tempdir
 
     def get_fname_base(self):
-        return ''.join((self.get_temp_dir(), "/", self.projectname))
+        return str(self.get_temp_dir() / self.projectname)
 
     def get_file_list(self):
         return self.get_fname_base() + ".list.tmp"
@@ -337,11 +293,11 @@ class VimProject(object):
         if self.type in ['c']:
             inc = os.environ.get("C_INCLUDE_PATH", None)
             if inc:
-                ret += list(map(formpath, inc.split(";")))
+                ret += list(map(formpath, inc.split(os.pathsep)))
         elif self.type in ['cpp']:
             inc = os.environ.get("CPLUS_INCLUDE_PATH", None)
             if inc:
-                ret += list(map(formpath, inc.split(";")))
+                ret += list(map(formpath, inc.split(os.pathsep)))
         for dir in ret:
             vim.command('silent set tags+=%s/tags' % str2vimfmt(dir))
 
@@ -351,7 +307,7 @@ class VimProject(object):
 
     def load_session_file(self):
         session = self.get_session_fname()
-        if self.projectfile and path.isfile(session):
+        if self.projectfile and Path(session).is_file():
             vim.command(r'''silent so %s''' % str2vimfmt(session))
 
     def write_session_file(self):
@@ -360,8 +316,8 @@ class VimProject(object):
             vim.command(r'''silent mks! %s''' % str2vimfmt(session_fname))
 
     def commit_settings(self):
-        self.tempdir = os.path.join(tempfile.gettempdir(), "vimproject_" + hashlib.md5(self.basedir.encode("utf-8")).hexdigest()[:10])
-        vim.command('''silent set path=.,%s''' % (','.join(map(str2vimfmt, self.path))))
+        self.tempdir = Path(tempfile.gettempdir()) / ("vimproject_" + hashlib.md5(self.basedir.encode("utf-8")).hexdigest()[:10])
+        vim.command('''silent set path=.,%s''' % (','.join([str2vimfmt(p if Path(p).is_absolute() else str(Path(self.basedir + '/' + p).absolute())) for p in self.path])))
         vim.command('silent set tags=%s' % ','.join(map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
         self.add_library_tags()
         self.add_cscope_database()
@@ -389,8 +345,7 @@ class VimProject(object):
         if qffile:
             enc = vim.eval("&encoding")
             vimrecoding.recode_file(qffile, enc)
-            vim.command('cfile {qffile}'.format(qffile=str2vimfmt(qffile)))
-            self.open_quickfix()
+            self.load_quickfix_file(qffile)
 
     def is_error_in_quickfix(self):
         qflist = vim.eval("getqflist()")
@@ -445,7 +400,7 @@ class VimProject(object):
         repl = escape_text(repl)
         self.refresh_files()
         flist = self.get_file_list()
-        if path.isfile(flist):
+        if Path(flist).is_file():
             self.async_run('cat "{flist}" | pyargs pyrep -i -f "{pattern}" -t "{repl}"'.format(
                 flist=flist,
                 pattern=pattern,
@@ -453,7 +408,6 @@ class VimProject(object):
                 ))
         else:
             print("%s not found!" % flist, file=sys.stderr)
-
 
     def load_quickfix_file(self, fname):
         cwd = formpath(vim.eval('getcwd()'))
@@ -463,14 +417,14 @@ class VimProject(object):
         self.open_quickfix()
 
     def load_make_result(self):
-        if path.isfile(self.get_make_tmpfile()):
+        if Path(self.get_make_tmpfile()).is_file():
             self.update_compiler_efm()
             self.load_quickfix_file(self.get_make_tmpfile())
         else:
             print("%s not exist." % self.get_make_tmpfile(), file=sys.stderr)
 
     def load_grep_result(self):
-        if path.isfile(self.get_grep_tmpfile()):
+        if Path(self.get_grep_tmpfile()).is_file():
             self.set_grep_efm()
             self.load_quickfix_file(self.get_grep_tmpfile())
         else:
@@ -480,12 +434,17 @@ class VimProject(object):
         self.warning = not self.warning
         self.load_make_result()
 
+    def search_files(self):
+        basedir = Path(self.basedir)
+        for ptn in self.path:
+            for suffix in self.suffix:
+                yield from basedir.glob(ptn + "/*" + suffix)
+
     def refresh_files(self):
         self.files = []
-        for p in self.path:
-            self.files += search_files(p.split('/'), self.suffix)
         with open(self.get_file_list(), 'w') as f:
-            for fname in self.files:
+            for fname in self.search_files():
+                self.files.append(fname)
                 print(fname, file=f)
 
     def refresh_tags(self):
@@ -517,18 +476,25 @@ class VimProject(object):
                 print("no execute", file=sys.stderr)
 
 
-g_vimproject = VimProject()
+try:
+    g_vimproject = VimProject()
+except Exception as e:
+    import traceback
+    print(traceback.format_exc())
 
 def from_this_file():
     fname = vim.eval('''expand('%:p')''')
     g_vimproject.from_file(fname)
 
 def update_project_history():
-    fname = g_vimproject.projectfile
-    if fname.endswith(".vprj") or fname.endswith(".jvprj"):
+    if not g_vimproject.projectfile:
+        return
+
+    fname = str(g_vimproject.projectfile)
+    if fname.endswith(".vprj"):
         fs = []
         histfile = vim.eval("$HOME") + "/.vimproject"
-        if path.isfile(histfile):
+        if Path(histfile).is_file():
             fs = [l for l in [l.strip() for l in open(histfile, "r").readlines()] if l]
         try:
             if not IS_WIN:
@@ -549,10 +515,10 @@ def update_project_history():
 
 def select_history_project():
     histfile = vim.eval("$HOME") + "/.vimproject"
-    if path.isfile(histfile):
+    if Path(histfile).is_file():
         fs = [l for l in [l.strip() for l in open(histfile, "r").readlines()] if l]
         if fs:
-            ret = int(vim.eval('''inputlist(['Project history list here, select one:', %s])''' % ', '.join(['"%2d: %s. %s"' % (i + 1, (path.basename(fs[i]) + ' ').ljust(30, '.'), path.dirname(fs[i])) for i in range(len(fs))])))
+            ret = int(vim.eval('''inputlist(['Project history list here, select one:', %s])''' % ', '.join(['"%2d: %s. %s"' % (i + 1, (Path(fs[i]).name + ' ').ljust(30, '.'), str(Path(fs[i]).parent)) for i in range(len(fs))])))
             if 0 < ret <= len(fs):
                 vim.command('silent edit %s' % str2vimfmt(fs[ret - 1]))
         else:
@@ -562,19 +528,14 @@ def select_history_project():
 
 
 def edit_project_file():
-    fname = g_vimproject.basedir + '/' + g_vimproject.projectname + '.vprj'
-    if path.isfile(fname):
-        vim.command('silent find %s' % str2vimfmt(fname))
-        return
-    fname = g_vimproject.basedir + '/' + g_vimproject.projectname + '.jvprj'
-    if path.isfile(fname):
-        vim.command('silent find %s' % str2vimfmt(fname))
+    if g_vimproject.projectfile:
+        vim.command('silent find %s' % str2vimfmt(str(g_vimproject.projectfile)))
         return
     print("Project file does not exist, cannot open it!", file=sys.stderr)
 
 def edit_file_list_file():
     fname = g_vimproject.get_file_list()
-    if path.isfile(fname):
+    if Path(fname).is_file():
         vim.command('silent find %s' % str2vimfmt(fname))
     else:
         print("File list file does not exist, cannot open it!", file=sys.stderr)
@@ -589,13 +550,13 @@ def search_project_file():
                 files.append(cwd + '/' + fname)
             elif fname.lower().endswith('.jvprj'):
                 files.append(cwd + '/' + fname)
-        _cwd = path.dirname(cwd)
+        _cwd = str(Path(cwd).parent)
         if _cwd == cwd:
             break
         else:
             cwd = _cwd
     if files:
-        ret = int(vim.eval('''inputlist(['Projects found, select one:', %s])''' % ', '.join(['"%2d: %s. %s"' % (i+1, path.basename(files[i]) + ' '.ljust(30, '.'), path.dirname(files[i])) for i in range(len(files))])))
+        ret = int(vim.eval('''inputlist(['Projects found, select one:', %s])''' % ', '.join(['"%2d: %s. %s"' % (i+1, Path(files[i]).name + ' '.ljust(30, '.'), str(Path(files[i]).parent)) for i in range(len(files))])))
         if 0 < ret <= len(files):
             vim.command('silent edit %s' % str2vimfmt(files[ret - 1]))
     else:
@@ -603,11 +564,13 @@ def search_project_file():
 
 def start_terminal_on_project():
     if IS_WIN:
-        orig = os.getcwd()
-        os.chdir(g_vimproject.basedir)
-        #os.system('start cmd.exe')
-        Popen("start Console.exe", shell = 1)
-        os.chdir(orig)
+        import platform
+
+        if int(platform.win32_ver()[0]) >= 10:
+            Popen("start cmd.exe /c cmdex.exe", cwd=g_vimproject.basedir, shell=1)
+        else:
+            Popen("start Console.exe -t cmdex", cwd=g_vimproject.basedir, shell=1)
+
     else:
         Popen("gnome-terminal --working-directory '%s'" % g_vimproject.basedir, shell = 1)
 
