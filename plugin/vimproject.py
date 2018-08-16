@@ -325,7 +325,7 @@ class VimProject(object):
             vim.command(self.vimcmd)
 
     def open_quickfix(self):
-        vim.command("execute 'copen 15'")
+        vim.command("execute 'botright copen 15'")
         if not self.is_error_in_quickfix():
             vim.command("execute 'normal G'")
         vim.command('wincmd p')
@@ -453,7 +453,7 @@ class VimProject(object):
     def refresh_cscope(self):
         if self.type in ['c', 'cpp', 'java']:
             vim.command('silent! cs kill -1')
-            call(['cscope', '-b', '-k', '-f', self.get_cscope_fname(), '-i', self.get_file_list()])
+            call(['cscope', '-b', '-k', '-f', self.get_cscope_fname().replace("\\", "/"), '-i', self.get_file_list().replace("\\", "/")])
             self.add_cscope_database()
 
     def update(self):
