@@ -19,6 +19,10 @@ _COMPILER_EFM = {
     'msvc' : [
         #error
         [
+            r"%.%#>%f(%l)%\s%#: %trror C%n: %m",
+            r"%.%#>%f(%l)%\s%#: fatal %trror C%n: %m",
+            r"%.%#>%s: fatal %trror LNK%n: %m",
+            r"%.%#>%s: %trror LNK%n: %m",
             r"%f(%l)%\s%#: %trror C%n: %m",
             r"%f(%l)%\s%#: fatal %trror C%n: %m",
             r"%s: fatal %trror LNK%n: %m",
@@ -26,6 +30,8 @@ _COMPILER_EFM = {
         ],
         #warning
         [
+            r"%.%#>%f(%l)%\s%#: %tarning C%n: %m",
+            r"%.%#>%s: %tarning LNK%n: %m",
             r"%f(%l)%\s%#: %tarning C%n: %m",
             r"%s: %tarning LNK%n: %m",
         ],
@@ -72,6 +78,16 @@ _COMPILER_EFM = {
         ],
         [
             r'''%W"%f"\,%\s%#line%\s%#%l:%\s%#Warning:%m''',
+        ],
+    ],
+    'armcc5': [
+        [
+            r"%f(%l): %trror: #%n: %m",
+            r"%f(%l): %trror: %m",
+        ],
+        [
+            r"%f(%l): %tarning: #%n: %m",
+            r"%f(%l): %tarning: %m",
         ],
     ],
     'ads' :[
