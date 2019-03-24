@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-
 import os
 import sys
 try:
@@ -11,19 +10,22 @@ except ImportError:
 
 
 def guess_encoding(line):
-    encs = ["ascii", "utf-8", "cp936", "big5", "latin1"]
+    encs = ["ascii", "utf-8", "gb18030", "big5", "latin1"]
     for enc in encs:
         try:
             new_line = line.decode(enc, "strict")
             return enc, new_line
         except UnicodeError:
-            if chardet:
-                ret = chardet.detect(line)
-                enc = ret[0]
-                new_line = line.decode(enc, "replace")
-                return enc, new_line
-            else:
-                raise
+            pass
+
+    if chardet:
+        ret = chardet.detect(line)
+        enc = ret['encoding']
+        new_line = line.decode(enc, "replace")
+        return enc, new_line
+    else:
+        return "", line.decode("utf-8", 'ignore')
+
 
 def recode_std(enc):
     while 1:
@@ -34,6 +36,7 @@ def recode_std(enc):
 
         sys.stdout.write(new_line.encode(enc, "replace"))
         sys.stdout.flush()
+
 
 def recode_file(fname, enc):
     text = open(fname, "rb").read().replace(b'\r', b'')

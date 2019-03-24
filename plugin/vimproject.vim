@@ -30,12 +30,13 @@ au FileType vimproj             python3 from_this_file()
 au FileType vimproj             python3 update_project_history()
 au FileType vimproj             set syntax=python
 au BufWritePost *.vprj,*.jvprj  python3 from_this_file()
+au VimEnter *                   python3 detect_project()
 
 au VimLeavePre *                python3 g_vimproject.write_session_file()
 
 command! -nargs=* VPRunExecution    python3 g_vimproject.run_execute('''<args>''')
 command! -nargs=* VPMakeProject     python3 g_vimproject.make_project('''<args>''')
-command! -nargs=* VPMakeThisFile    python3 make_this_file('''<args>''')
+command! -nargs=* VPRebuildProject  python3 g_vimproject.rebuild_project('''<args>''')
 command! VPUpdateTags               python3 g_vimproject.update()
 command! VPInvertWarning            python3 g_vimproject.invert_warning()
 command! VPEditProject              python3 edit_project_file()

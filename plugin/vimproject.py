@@ -11,6 +11,7 @@ import tempfile
 from subprocess import call, Popen
 from copy import copy
 import vimrecoding
+from findrep import find_pattern, replace_pattern
 
 IS_WIN = int(vim.eval('has("win32")'))
 
@@ -194,13 +195,12 @@ class VimProject(object):
         ext = vim.eval('''expand('%:e')''')
         if not ext:
             ext = ''
-        self.projectname = vim.eval('expand("%:t")')
-        if not self.projectname:
-            self.projectname = "untitled"
+        self.projectname = ''
         self.basedir = formpath(vim.eval('getcwd()'))
         self.path = ['.']
         self.suffix = ['.' + ext]
         self.make = ''
+        self.rebuild = ''
         self.execute = ''
         self.files = []
         self.compiler = []
@@ -211,10 +211,7 @@ class VimProject(object):
         self.tags = []
         self.projectfile = ""
         self.vimcmd = ""
-
-        if ext in ['py', 'pyw']:
-            self.make = 'pylint -r n -f parseable %:p'
-            self.compiler = ['pylint']
+        self.encoding = 'utf-8'
 
     def from_file(self, fname):
         fpproj = Path(fname).absolute()
@@ -257,6 +254,8 @@ class VimProject(object):
                 self.suffix = ['.vim']
         if 'MAKE' in gl:
             self.make = gl['MAKE']
+        if 'REBUILD' in gl:
+            self.rebuild = gl['REBUILD']
         if 'COMPILER' in gl:
             self.compiler = gl['COMPILER']
         else:
@@ -270,6 +269,8 @@ class VimProject(object):
             self.tags = [Path(p).absolute().as_posix() for p in gl['TAGS']]
         if 'VIMCMD' in gl:
             self.vimcmd = gl['VIMCMD']
+        if 'ENCODING' in gl:
+            self.encoding = gl['ENCODING']
         self.commit_settings()
 
     def get_temp_dir(self):
@@ -328,6 +329,18 @@ class VimProject(object):
             session_fname = self.get_session_fname()
             vim.command(r'''silent mks! %s''' % str2vimfmt(session_fname))
 
+    def save_all(self):
+        vim.command("wall")
+
+    def load_files(self):
+        f = Path(self.get_file_list())
+        if not f.exists():
+            return
+
+        with open(f) as fp:
+            for line in fp:
+                self.files.append(Path(line.strip()))
+
     def commit_settings(self):
         self.tempdir = Path(
             tempfile.gettempdir()) / ("vimproject_" + hashlib.md5(
@@ -340,6 +353,7 @@ class VimProject(object):
         ])))
         vim.command('silent set tags=%s' % ','.join(
             map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
+        self.load_files()
         self.add_library_tags()
         self.add_cscope_database()
         if self.vimcmd:
@@ -353,18 +367,22 @@ class VimProject(object):
         vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
     def async_run(self, cmd, qffile=None):
-        vim_cmd = 'silent !cd "{basedir}" && {cmd} 2>&1'.format(
-            basedir=self.basedir, cmd=cmd)
+        cwd = Path.cwd()
+        os.chdir(self.basedir)
+        try:
+            vim_cmd = '{cmd} 2>&1'.format(cmd=cmd)
 
-        if qffile:
-            vim_cmd += ' | tee "{qffile}"'.format(qffile=qffile)
+            if qffile:
+                vim_cmd += ' | tee "{qffile}"'.format(qffile=qffile)
 
-        vim.command(vim_cmd)
+            os.system(vim_cmd)
 
-        if qffile:
-            enc = vim.eval("&encoding")
-            vimrecoding.recode_file(qffile, enc)
-            self.load_quickfix_file(qffile)
+            if qffile and Path(qffile).exists():
+                enc = vim.eval("&encoding")
+                vimrecoding.recode_file(qffile, enc)
+                self.load_quickfix_file(qffile)
+        finally:
+            os.chdir(str(cwd))
 
     def is_error_in_quickfix(self):
         qflist = vim.eval("getqflist()")
@@ -375,12 +393,22 @@ class VimProject(object):
         return 0
 
     def make_project(self, args):
+        self.save_all()
         self.update_compiler_efm()
         if self.make:
             make = self.make.replace("%:p", vim.eval('expand("%:p")'))
             self.async_run(make + " " + args, self.get_make_tmpfile())
         else:
             print("MAKE command is not set.", file=sys.stderr)
+
+    def rebuild_project(self, args):
+        self.save_all()
+        self.update_compiler_efm()
+        if self.rebuild:
+            make = self.rebuild.replace("%:p", vim.eval('expand("%:p")'))
+            self.async_run(make + " " + args, self.get_make_tmpfile())
+        else:
+            print("REBUILD command is not set.", file=sys.stderr)
 
     def update_compiler_efm(self):
         fmts = []
@@ -397,33 +425,27 @@ class VimProject(object):
         vim.command(r"silent set efm=%s" % ','.join(map(str2vimfmt, fmts)))
 
     def grep_text(self, regex):
+        self.save_all()
         regex = escape_text(regex)
-        self.refresh_files()
-        file_list = self.get_file_list()
-        if not os.path.exists(file_list):
-            print("%s not exist." % file_list, file=sys.stderr)
-            return
-        grepcmd = r'cat {listfile} | pyargs pygrep -HnCS "{regex}"'.format(
-            listfile=file_list,
-            regex=regex,
-        )
-        self.set_grep_efm()
-        self.async_run(grepcmd, self.get_grep_tmpfile())
+        if not self.files:
+            self.refresh_files()
+        with open(self.get_grep_tmpfile(), "w", encoding="utf-8") as f:
+            for msg in find_pattern(self.files, regex, self.encoding):
+                print(msg, file=f)
+        self.load_grep_result()
 
     def set_grep_efm(self):
         vim.command(r"silent set efm=%f:%l:%c:%m,%f:%l:%m")
 
     def replace_pattern(self, pattern, repl):
-        pattern = escape_text(pattern)
-        repl = escape_text(repl)
-        self.refresh_files()
-        flist = self.get_file_list()
-        if Path(flist).is_file():
-            self.async_run(
-                'cat "{flist}" | pyargs pyrep -i -f "{pattern}" -t "{repl}"'.
-                format(flist=flist, pattern=pattern, repl=repl))
-        else:
-            print("%s not found!" % flist, file=sys.stderr)
+        self.save_all()
+        if not self.files:
+            self.refresh_files()
+        with open(self.get_grep_tmpfile(), "w", encoding="utf-8") as f:
+            for msg in replace_pattern(self.files, pattern, repl,
+                                       self.encoding):
+                print(msg, file=f)
+        self.load_grep_result()
 
     def load_quickfix_file(self, fname):
         cwd = formpath(vim.eval('getcwd()'))
@@ -461,7 +483,7 @@ class VimProject(object):
         with open(self.get_file_list(), 'w') as f:
             for fname in self.search_files():
                 self.files.append(fname)
-                print(str(fname).replace("\\", "/"), file=f)
+                print(formpath(str(fname)), file=f)
 
     def refresh_tags(self):
         call([
@@ -482,6 +504,7 @@ class VimProject(object):
             self.add_cscope_database()
 
     def update(self):
+        self.save_all()
         self.refresh_files()
         self.refresh_tags()
         self.refresh_cscope()
@@ -574,8 +597,9 @@ def select_history_project():
 
 def edit_project_file():
     if g_vimproject.projectfile:
-        vim.command(
-            'silent find %s' % str2vimfmt(str(g_vimproject.projectfile)))
+        cmd = 'silent edit %s' % str2vimfmt(
+            formpath(str(g_vimproject.projectfile)))
+        vim.command(cmd)
         return
     print("Project file does not exist, cannot open it!", file=sys.stderr)
 
@@ -583,7 +607,7 @@ def edit_project_file():
 def edit_file_list_file():
     fname = g_vimproject.get_file_list()
     if Path(fname).is_file():
-        vim.command('silent find %s' % str2vimfmt(fname))
+        vim.command('silent edit %s' % str2vimfmt(fname))
     else:
         print(
             "File list file does not exist, cannot open it!", file=sys.stderr)
@@ -640,11 +664,6 @@ def start_terminal_on_project():
             shell=1)
 
 
-def make_this_file(args):
-    target = vim.eval("expand('%')")
-    g_vimproject.make_project(target + " " + args)
-
-
 def to_re_pattern(s):
     ss = []
     for c in s:
@@ -690,3 +709,36 @@ def replace_this_word():
 def replace_selection():
     sel = vim.eval('VPGetVisual()')
     replace_to(to_re_pattern(sel))
+
+
+def detect_project():
+    if g_vimproject.projectname:  # already editor a project file
+        return
+
+    cwd = Path.cwd()
+
+    # find any .vprj file in current dir or parent dir
+    while 1:
+        prj = cwd / ".vprj"
+        if prj.exists():
+            g_vimproject.from_file(prj)
+            return
+
+        parent = cwd.parent
+        if parent == cwd:
+            break
+        else:
+            cwd = parent
+
+    # if not .vprj found, find any file endswith .vprj
+    cwd = Path.cwd()
+    while 1:
+        for f in cwd.glob('*.vprj'):
+            g_vimproject.from_file(f)
+            return
+
+        parent = cwd.parent
+        if parent == cwd:
+            break
+        else:
+            cwd = parent
