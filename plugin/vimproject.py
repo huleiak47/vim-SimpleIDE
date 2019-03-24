@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import vim
-import os
-import sys
-import shutil
 import hashlib
-from pathlib import Path
+import os
+import shutil
+import sys
 import tempfile
-from subprocess import call, Popen
 from copy import copy
+from pathlib import Path
+from subprocess import Popen, call
+
+import vim
 import vimrecoding
 from findrep import find_pattern, replace_pattern
 
@@ -167,6 +168,8 @@ _COMPILER_EFM = {
 
 
 def formpath(p):
+    if not isinstance(p, str):
+        p = str(p)
     return p.replace('\\', '/')
 
 
@@ -226,7 +229,7 @@ class VimProject(object):
         self.reset_config()
         self.projectfile = fpproj
         self.projectname = fpproj.stem
-        self.basedir = formpath(str(fpproj.parent))
+        self.basedir = formpath(fpproj.parent)
         if 'NAME' in gl:
             self.projectname = gl['NAME']
         if 'PATH' in gl:
@@ -483,7 +486,7 @@ class VimProject(object):
         with open(self.get_file_list(), 'w') as f:
             for fname in self.search_files():
                 self.files.append(fname)
-                print(formpath(str(fname)), file=f)
+                print(formpath(fname), file=f)
 
     def refresh_tags(self):
         call([
@@ -575,20 +578,23 @@ def select_history_project():
     histfile = vim.eval("$HOME") + "/.vimproject"
     if Path(histfile).is_file():
         fs = [
-            l for l in [l.strip() for l in open(histfile, "r").readlines()]
-            if l
+            Path(line.strip()) for line in open(histfile).readlines()
+            if line.strip()
         ]
         if fs:
             ret = int(
                 vim.eval(
                     '''inputlist(['Project history list here, select one:', %s])'''
-                    % ', '.join([
-                        '"%2d: %s. %s"' %
-                        (i + 1, (Path(fs[i]).name + ' ').ljust(30, '.'),
-                         str(Path(fs[i]).parent)) for i in range(len(fs))
-                    ])))
+                    % ', '.join('"%2d: %s"' % (i, formpath(f))
+                                for i, f in enumerate(fs, 1))))
             if 0 < ret <= len(fs):
-                vim.command('silent edit %s' % str2vimfmt(fs[ret - 1]))
+                if fs[ret - 1].exists():
+                    vim.command(
+                        'silent edit %s' % str2vimfmt(formpath(fs[ret - 1])))
+                else:
+                    print(
+                        "Cannot find file: %s" % str(fs[ret - 1]),
+                        file=sys.stderr)
         else:
             print("no project history")
     else:
@@ -597,8 +603,7 @@ def select_history_project():
 
 def edit_project_file():
     if g_vimproject.projectfile:
-        cmd = 'silent edit %s' % str2vimfmt(
-            formpath(str(g_vimproject.projectfile)))
+        cmd = 'silent edit %s' % str2vimfmt(formpath(g_vimproject.projectfile))
         vim.command(cmd)
         return
     print("Project file does not exist, cannot open it!", file=sys.stderr)
@@ -611,36 +616,6 @@ def edit_file_list_file():
     else:
         print(
             "File list file does not exist, cannot open it!", file=sys.stderr)
-
-
-def search_project_file():
-    files = []
-    cwd = formpath(vim.eval('getcwd()'))
-    while 1:
-        ret = os.listdir(cwd)
-        for fname in ret:
-            if fname.lower().endswith('.vprj'):
-                files.append(cwd + '/' + fname)
-            elif fname.lower().endswith('.jvprj'):
-                files.append(cwd + '/' + fname)
-        _cwd = str(Path(cwd).parent)
-        if _cwd == cwd:
-            break
-        else:
-            cwd = _cwd
-    if files:
-        ret = int(
-            vim.eval(
-                '''inputlist(['Projects found, select one:', %s])''' %
-                ', '.join([
-                    '"%2d: %s. %s"' % (i + 1, Path(files[i]).name + ' '.ljust(
-                        30, '.'), str(Path(files[i]).parent))
-                    for i in range(len(files))
-                ])))
-        if 0 < ret <= len(files):
-            vim.command('silent edit %s' % str2vimfmt(files[ret - 1]))
-    else:
-        print("Have not found any project file.", file=sys.stderr)
 
 
 def start_terminal_on_project():
