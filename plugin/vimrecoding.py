@@ -4,7 +4,10 @@
 
 import os
 import sys
-import chardet
+try:
+    import chardet
+except ImportError:
+    chardet = None
 
 
 def guess_encoding(line):
@@ -14,12 +17,13 @@ def guess_encoding(line):
             new_line = line.decode(enc, "strict")
             return enc, new_line
         except UnicodeError:
-            pass
-
-    ret = chardet.detect(line)
-    enc = ret[0]
-    new_line = line.decode(enc, "replace")
-    return enc, new_line
+            if chardet:
+                ret = chardet.detect(line)
+                enc = ret[0]
+                new_line = line.decode(enc, "replace")
+                return enc, new_line
+            else:
+                raise
 
 def recode_std(enc):
     while 1:
