@@ -18,9 +18,10 @@ def find_pattern(files: list, pattern: str, enc):
                             mobj.start() + 1,
                             line.rstrip().decode(enc))
         except (IOError, FileExistsError, UnicodeError):
-            import traceback
-            print(traceback.format_exc(), file=sys.stderr)
+            # import traceback
+            # print(traceback.format_exc(), file=sys.stderr)
             print("file: %s" % fname, file=sys.stderr)
+            pass
 
 
 def replace_pattern(files: list, pattern: str, to: str, enc):

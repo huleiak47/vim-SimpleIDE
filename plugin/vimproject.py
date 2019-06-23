@@ -203,6 +203,7 @@ class VimProject(object):
         self.path = ['.']
         self.suffix = ['.' + ext]
         self.make = ''
+        self.buildpath = self.basedir
         self.rebuild = ''
         self.execute = ''
         self.files = []
@@ -230,6 +231,7 @@ class VimProject(object):
         self.projectfile = fpproj
         self.projectname = fpproj.stem
         self.basedir = formpath(fpproj.parent)
+        self.buildpath = self.basedir
         if 'NAME' in gl:
             self.projectname = gl['NAME']
         if 'PATH' in gl:
@@ -259,6 +261,14 @@ class VimProject(object):
             self.make = gl['MAKE']
         if 'REBUILD' in gl:
             self.rebuild = gl['REBUILD']
+        if 'BUILDPATH' in gl:
+            buildpath = gl['BUILDPATH']
+            if not Path(buildpath).is_absolute():
+                buildpath = str(Path(self.basedir) / buildpath)
+            if Path(buildpath).is_dir():
+                self.buildpath = formpath(buildpath)
+            else:
+                pass
         if 'COMPILER' in gl:
             self.compiler = gl['COMPILER']
         else:
@@ -274,6 +284,7 @@ class VimProject(object):
             self.vimcmd = gl['VIMCMD']
         if 'ENCODING' in gl:
             self.encoding = gl['ENCODING']
+
         self.commit_settings()
 
     def get_temp_dir(self):
@@ -363,15 +374,15 @@ class VimProject(object):
             vim.command(self.vimcmd)
 
     def open_quickfix(self):
-        vim.command("execute 'botright copen 15'")
+        vim.command("execute 'botright copen 10'")
         if not self.is_error_in_quickfix():
             vim.command("execute 'normal G'")
         vim.command('wincmd p')
-        vim.command('silent! lcd ' + str2vimfmt(self.basedir))
+        # vim.command('silent! lcd ' + str2vimfmt(self.basedir))
 
     def async_run(self, cmd, qffile=None):
         cwd = Path.cwd()
-        os.chdir(self.basedir)
+        os.chdir(self.buildpath)
         try:
             vim_cmd = '{cmd} 2>&1'.format(cmd=cmd)
 
@@ -383,7 +394,7 @@ class VimProject(object):
             if qffile and Path(qffile).exists():
                 enc = vim.eval("&encoding")
                 vimrecoding.recode_file(qffile, enc)
-                self.load_quickfix_file(qffile)
+                self.load_quickfix_file(qffile, self.buildpath)
         finally:
             os.chdir(str(cwd))
 
@@ -450,9 +461,11 @@ class VimProject(object):
                 print(msg, file=f)
         self.load_grep_result()
 
-    def load_quickfix_file(self, fname):
+    def load_quickfix_file(self, fname, path=None):
         cwd = formpath(vim.eval('getcwd()'))
-        vim.command('silent cd ' + str2vimfmt(self.basedir))
+        if not path:
+            path = self.basedir
+        vim.command('silent cd ' + str2vimfmt(path))
         vim.command('silent cfile %s' % str2vimfmt(fname))
         vim.command('silent cd ' + str2vimfmt(cwd))
         self.open_quickfix()
@@ -460,7 +473,7 @@ class VimProject(object):
     def load_make_result(self):
         if Path(self.get_make_tmpfile()).is_file():
             self.update_compiler_efm()
-            self.load_quickfix_file(self.get_make_tmpfile())
+            self.load_quickfix_file(self.get_make_tmpfile(), self.buildpath)
         else:
             print("%s not exist." % self.get_make_tmpfile(), file=sys.stderr)
 
