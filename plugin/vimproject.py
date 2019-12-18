@@ -206,6 +206,7 @@ class VimProject(object):
         self.buildpath = self.basedir
         self.rebuild = ''
         self.execute = ''
+        self.execpath = self.basedir
         self.files = []
         self.compiler = []
         self.type = ''
@@ -221,7 +222,7 @@ class VimProject(object):
         fpproj = Path(fname).absolute()
         if not fname or not fpproj.is_file():
             return
-        gl = {}
+        gl = {"__file__": str(fpproj)}
         try:
             exec(compile(fpproj.read_text(), fname, 'exec'), gl)
         except Exception as e:
@@ -238,6 +239,14 @@ class VimProject(object):
             self.path = gl['PATH']
         if 'EXECUTE' in gl:
             self.execute = gl['EXECUTE']
+        if 'EXECPATH' in gl:
+            execpath = Path(gl['EXECPATH'])
+            if not Path(execpath).is_absolute():
+                execpath = str(Path(self.basedir) / execpath)
+            if Path(execpath).is_dir():
+                self.execpath = formpath(execpath)
+            else:
+                pass
         if 'TYPE' in gl:
             self.type = gl['TYPE']
         if 'SUFFIX' in gl:
@@ -530,7 +539,7 @@ class VimProject(object):
         if self.execute:
             execute = self.execute  #.replace('/', '\\')
             origdir = formpath(vim.eval('getcwd()'))
-            vim.command('silent! lcd ' + str2vimfmt(self.basedir))
+            vim.command('silent! lcd ' + str2vimfmt(self.execpath))
             os.system(execute + ' ' + args +
                       (' && pause || pause' if self.pause else ''))
             vim.command('silent! lcd ' + str2vimfmt(origdir))
