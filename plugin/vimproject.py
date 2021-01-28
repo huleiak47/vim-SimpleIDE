@@ -15,6 +15,7 @@ import vimrecoding
 from findrep import find_pattern, replace_pattern
 
 IS_WIN = int(vim.eval('has("win32")'))
+IS_GUI = int(vim.eval('has("gui")'))
 
 #对于不同编译器的不同错误信息格式，第一项为错误，第二项为警告
 _COMPILER_EFM = {
@@ -257,9 +258,7 @@ class VimProject(object):
             elif self.type == 'c':
                 self.suffix = ['.c', '.h']
             elif self.type == 'cpp':
-                self.suffix = [
-                    '.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'
-                ]
+                self.suffix = ['.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh']
             elif self.type == 'java':
                 self.suffix = ['.java']
             elif self.type == 'latex':
@@ -339,8 +338,7 @@ class VimProject(object):
 
     def add_cscope_database(self):
         if self.type in ['c', 'cpp', 'java']:
-            vim.command('silent! cs add %s %s' % (str2vimfmt(
-                self.get_cscope_fname()), str2vimfmt(self.basedir)))
+            vim.command('silent! cs add %s %s' % (str2vimfmt(self.get_cscope_fname()), str2vimfmt(self.basedir)))
 
     def load_session_file(self):
         session = self.get_session_fname()
@@ -366,16 +364,11 @@ class VimProject(object):
 
     def commit_settings(self):
         self.tempdir = Path(
-            tempfile.gettempdir()) / ("vimproject_" + hashlib.md5(
-                self.basedir.encode("utf-8")).hexdigest()[:10])
+            tempfile.gettempdir()) / ("vimproject_" + hashlib.md5(self.basedir.encode("utf-8")).hexdigest()[:10])
         vim.command('''silent set path=.,%s''' % (','.join([
-            str2vimfmt(
-                p if Path(p).is_absolute(
-                ) else str(Path(self.basedir + '/' + p).absolute()))
-            for p in self.path
+            str2vimfmt(p if Path(p).is_absolute() else str(Path(self.basedir + '/' + p).absolute())) for p in self.path
         ])))
-        vim.command('silent set tags=%s' % ','.join(
-            map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
+        vim.command('silent set tags=%s' % ','.join(map(str2vimfmt, [self.get_tags_fname()] + self.tags)))
         self.load_files()
         self.add_library_tags()
         self.add_cscope_database()
@@ -393,10 +386,13 @@ class VimProject(object):
         cwd = Path.cwd()
         os.chdir(self.buildpath)
         try:
-            vim_cmd = '{cmd} 2>&1'.format(cmd=cmd)
-
-            if qffile:
-                vim_cmd += ' | tee "{qffile}"'.format(qffile=qffile)
+            if IS_WIN:
+                if IS_GUI:
+                    vim_cmd = 'cmd.exe /c "{cmd}" 2>&1 | tee "{qffile}"'.format(cmd=cmd, qffile=qffile)
+                else:
+                    vim_cmd = 'cmd.exe /c "{cmd}" >"{qffile}" 2>&1 '.format(cmd=cmd, qffile=qffile)
+            else:
+                vim_cmd = 'sh -c \'{cmd}\' >"{qffile}" 2>&1'.format(cmd=cmd, qffile=qffile)
 
             os.system(vim_cmd)
 
@@ -465,8 +461,7 @@ class VimProject(object):
         if not self.files:
             self.refresh_files()
         with open(self.get_grep_tmpfile(), "w", encoding="utf-8") as f:
-            for msg in replace_pattern(self.files, pattern, repl,
-                                       self.encoding):
+            for msg in replace_pattern(self.files, pattern, repl, self.encoding):
                 print(msg, file=f)
         self.load_grep_result()
 
@@ -512,8 +507,7 @@ class VimProject(object):
 
     def refresh_tags(self):
         call([
-            'ctags', '--c-kinds=+px', '--c++-kinds=+px', '--fields=+iaS',
-            '--extra=+q', '-L',
+            'ctags', '--c-kinds=+px', '--c++-kinds=+px', '--fields=+iaS', '--extras=+q', '-L',
             self.get_file_list(), '-f',
             self.get_tags_fname()
         ])
@@ -522,7 +516,7 @@ class VimProject(object):
         if self.type in ['c', 'cpp', 'java']:
             vim.command('silent! cs kill -1')
             call([
-                'cscope', '-b', '-k', '-f',
+                'cscope', '-b', '-c', '-u', '-k', '-f',
                 self.get_cscope_fname().replace("\\", "/"), '-i',
                 self.get_file_list().replace("\\", "/")
             ])
@@ -540,14 +534,11 @@ class VimProject(object):
             execute = self.execute  #.replace('/', '\\')
             origdir = formpath(vim.eval('getcwd()'))
             vim.command('silent! lcd ' + str2vimfmt(self.execpath))
-            os.system(execute + ' ' + args +
-                      (' && pause || pause' if self.pause else ''))
+            os.system(execute + ' ' + args + (' && pause || pause' if self.pause else ''))
             vim.command('silent! lcd ' + str2vimfmt(origdir))
         else:
             if vim.eval('&ft') in ['python', 'perl', 'lua']:
-                os.system(
-                    vim.eval('&ft') + ' ' + vim.eval('''expand('%:p')''') +
-                    ' ' + args + ' && pause || pause')
+                os.system(vim.eval('&ft') + ' ' + vim.eval('''expand('%:p')''') + ' ' + args + ' && pause || pause')
             else:
                 print("no execute", file=sys.stderr)
 
@@ -573,11 +564,7 @@ def update_project_history():
         fs = []
         histfile = vim.eval("$HOME") + "/.vimproject"
         if Path(histfile).is_file():
-            fs = [
-                l
-                for l in [l.strip() for l in open(histfile, "r").readlines()]
-                if l
-            ]
+            fs = [l for l in [l.strip() for l in open(histfile, "r").readlines()] if l]
         try:
             if not IS_WIN:
                 ret = fs.index(fname)
@@ -599,24 +586,16 @@ def update_project_history():
 def select_history_project():
     histfile = vim.eval("$HOME") + "/.vimproject"
     if Path(histfile).is_file():
-        fs = [
-            Path(line.strip()) for line in open(histfile).readlines()
-            if line.strip()
-        ]
+        fs = [Path(line.strip()) for line in open(histfile).readlines() if line.strip()]
         if fs:
             ret = int(
-                vim.eval(
-                    '''inputlist(['Project history list here, select one:', %s])'''
-                    % ', '.join('"%2d: %s"' % (i, formpath(f))
-                                for i, f in enumerate(fs, 1))))
+                vim.eval('''inputlist(['Project history list here, select one:', %s])''' %
+                         ', '.join('"%2d: %s"' % (i, formpath(f)) for i, f in enumerate(fs, 1))))
             if 0 < ret <= len(fs):
                 if fs[ret - 1].exists():
-                    vim.command(
-                        'silent edit %s' % str2vimfmt(formpath(fs[ret - 1])))
+                    vim.command('silent edit %s' % str2vimfmt(formpath(fs[ret - 1])))
                 else:
-                    print(
-                        "Cannot find file: %s" % str(fs[ret - 1]),
-                        file=sys.stderr)
+                    print("Cannot find file: %s" % str(fs[ret - 1]), file=sys.stderr)
         else:
             print("no project history")
     else:
@@ -636,8 +615,7 @@ def edit_file_list_file():
     if Path(fname).is_file():
         vim.command('silent edit %s' % str2vimfmt(fname))
     else:
-        print(
-            "File list file does not exist, cannot open it!", file=sys.stderr)
+        print("File list file does not exist, cannot open it!", file=sys.stderr)
 
 
 def start_terminal_on_project():
@@ -646,7 +624,7 @@ def start_terminal_on_project():
 
         if int(platform.win32_ver()[0]) >= 10:
             Popen(
-                "start cmd.exe /c cmdex.exe",
+                "start wt.exe",
                 cwd=g_vimproject.basedir,
                 shell=1)
         else:
@@ -656,9 +634,7 @@ def start_terminal_on_project():
                 shell=1)
 
     else:
-        Popen(
-            "gnome-terminal --working-directory '%s'" % g_vimproject.basedir,
-            shell=1)
+        vim.command(":term")
 
 
 def to_re_pattern(s):
@@ -683,8 +659,7 @@ def grep_selection():
 
 def replace_to(pattern):
     ret = vim.eval('input("Input replacement: ")')
-    do = vim.eval('''input('Do you want to replace "%s" to "%s"?(y/n)')''' %
-                  (pattern, ret))
+    do = vim.eval('''input('Do you want to replace "%s" to "%s"?(y/n)')''' % (pattern, ret))
     if do and do.lower() in ['y', 'yes']:
         g_vimproject.replace_pattern(pattern, ret)
 
